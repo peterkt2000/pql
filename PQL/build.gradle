@@ -1,0 +1,88 @@
+apply plugin: 'antlr'
+apply plugin: 'java'
+apply plugin: 'eclipse'
+
+sourceCompatibility = 1.8
+
+final GENERATED_MAIN = "src-gen/main/java"
+final GENERATED_TEST = "src-gen/test/java"
+
+sourceSets {
+    main {
+        java { srcDirs += [GENERATED_MAIN] }
+    }
+    main {
+        java { srcDirs += [GENERATED_TEST] }
+    }
+}
+
+repositories {
+    mavenCentral()
+    flatDir {
+    	dirs 'lib'
+    }
+}
+
+dependencies {
+	//compile group: 'org.antlr', name: 'antlr4-runtime', version: '4.7.1'
+    antlr "org.antlr:antlr4:4.7.1"
+    //compile 'com.github.javaparser:javaparser-symbol-solver-core:3.5.11'
+    //compile name: 'javaparser-symbol-solver-core-3.6.13-SNAPSHOT'
+    //compile name: 'javaparser-symbol-solver-core-3.6.13-SNAPSHOT-sources'
+    //implementation 'com.github.javaparser:javaparser-symbol-solver-core:3.16.3'
+	// https://mvnrepository.com/artifact/com.github.javaparser/javaparser-symbol-solver-core
+	//compile group: 'com.github.javaparser', name: 'javaparser-symbol-solver-core', version: '3.18.0'
+	implementation group: 'com.github.javaparser', name: 'javaparser-symbol-solver-core', version: '3.20.2'
+}
+
+generateGrammarSource.doFirst {
+    outputDirectory = new File(GENERATED_MAIN)
+}
+generateGrammarSource.doLast {
+    moveAntlrGeneratedFilesToTheirPackages(source, GENERATED_MAIN)
+}
+generateTestGrammarSource.doFirst {
+    outputDirectory = new File(GENERATED_TEST)
+}
+generateTestGrammarSource.doLast {
+    moveAntlrGeneratedFilesToTheirPackages(source, GENERATED_TEST)
+}
+
+def moveAntlrGeneratedFilesToTheirPackages(FileTree grammarFiles, generatedFolder) {
+    grammarFiles.each {File file ->
+        final grammarName = file.name.lastIndexOf('.')>=0 ? file.name[0 .. file.name.lastIndexOf('.')-1] : file.name
+        final grammarPackage = extractPackageNameFromGrammerFile(file)
+        copy {
+            from generatedFolder
+            include "${grammarName}*.*"
+            into generatedFolder + "/" + grammarPackage.replaceAll("\\.", "/")
+        }
+    }
+    project.delete fileTree(generatedFolder).include('*.*')
+}
+
+def extractPackageNameFromGrammerFile(File grammarFile) {
+    def grammarPackage = "unknown.package"
+    def packageRegex = ~/[ ]*package[ ]*([a-zA-Z]+[a-zA-Z0-9.-_]*)[ ]*;/
+    grammarFile.eachLine { line ->
+        def matcher = packageRegex.matcher(line)
+        if (matcher.find()){
+            grammarPackage = matcher.group(1)
+        }
+    }
+    return grammarPackage
+}
+
+task wrapper(type: Wrapper) {
+gradleVersion = '2.10'
+}
+
+
+task customFatJar(type: Jar) {
+    manifest {
+        attributes 'Main-Class': 'MainTest'
+    }
+    baseName = 'pql_on_android'
+    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
+    with jar
+}
